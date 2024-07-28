@@ -3,7 +3,7 @@ const mysql = require('mysql2');
 const cors = require('cors');
 
 const app = express();
-const port = 3001;
+const port = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json()); // Para manejar cuerpos JSON
@@ -25,7 +25,7 @@ connection.connect((err) => {
   }
 });
 
-// Ruta para obtener los deudores
+// Rutas de tu aplicación
 app.get('/debtors', (req, res) => {
   connection.query('SELECT * FROM debtors', (err, results) => {
     if (err) {
@@ -36,7 +36,6 @@ app.get('/debtors', (req, res) => {
   });
 });
 
-// Ruta para obtener los detalles de las deudas de un deudor específico
 app.get('/debts/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
 
@@ -46,7 +45,7 @@ app.get('/debts/:id', (req, res) => {
       res.status(500).json({ message: 'Internal Server Error' });
       return;
     }
-    
+
     if (results.length > 0) {
       const uniqueResults = results.map((debt, index) => ({
         ...debt,
