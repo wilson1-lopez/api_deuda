@@ -1,0 +1,35 @@
+# Obtener todos los deudores
+GET http://localhost:3001/debtors
+Content-Type: application/json
+
+###
+
+# Obtener detalles de la deuda para un deudor específico
+GET http://localhost:3001/debts/2
+Content-Type: application/json
+
+###
+# Crear un nuevo deudor
+POST http://localhost:3001/debtors
+Content-Type: application/json
+
+{
+  "name": "Nuevo Deudor",
+  "total_debt": 500
+}
+
+###
+
+# Actualizar un deudor
+PUT http://localhost:3001/debtors/1
+Content-Type: application/json
+
+{
+  "name": "Juan Perez Actualizado",
+  "total_debt": 350
+}
+
+###
+
+# Eliminar un deudor
+DELETE http://localhost:3001/debtors/1
