@@ -12,7 +12,7 @@ app.use(express.json()); // Para manejar cuerpos JSON
 const connection = mysql.createConnection({
   host: 'booxfva7gkco41ueigpq-mysql.services.clever-cloud.com',
   user: 'u9ogds8egmwvevci',
-  password: 'Gbajf9DNtghlzmc5lplR', // Reemplaza esto con tu contraseña de MySQL
+  password: 'Gbajf9DNtghlzmc5lplR', // 
   database: 'booxfva7gkco41ueigpq'
 });
 
