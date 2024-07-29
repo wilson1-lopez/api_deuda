@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json()); // Para manejar cuerpos JSON
 
 // Configuración de la conexión a MySQL
-let connection;
+
 
 function handleDisconnect() {
   connection = mysql.createConnection({
