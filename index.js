@@ -1,6 +1,8 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+const multer = require('multer');
+const path = require('path');
 
 const app = express();
 const port = process.env.PORT || 4000;
@@ -8,20 +10,18 @@ const port = process.env.PORT || 4000;
 app.use(cors());
 app.use(express.json()); // Para manejar cuerpos JSON
 
-// Configuración de la conexión a MySQL
+// Configuración para servir archivos estáticos desde el directorio uploads
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Configuración de la conexión a MySQL
+let connection;
 
 function handleDisconnect() {
   connection = mysql.createConnection({
     host: 'booxfva7gkco41ueigpq-mysql.services.clever-cloud.com',
     user: 'u9ogds8egmwvevci',
-    password: 'Gbajf9DNtghlzmc5lplR', // Reemplaza esto con tu contraseña de MySQL
+    password: 'Gbajf9DNtghlzmc5lplR',
     database: 'booxfva7gkco41ueigpq'
-    // Para desarrollo local
-    // host: 'localhost',
-    // user: 'root',
-    // password: '', // Reemplaza esto con tu contraseña de MySQL
-    // database: 'debtors_db'
   });
 
   connection.connect((err) => {
@@ -29,13 +29,14 @@ function handleDisconnect() {
       console.error('Error connecting to the database:', err.message);
       setTimeout(handleDisconnect, 2000); // Intentar reconectar después de 2 segundos
     } else {
-      console.log('Connection to the database was successful!');
+      console.log('Connected to the database!');
     }
   });
 
   connection.on('error', (err) => {
     console.error('Database error:', err);
     if (err.code === 'PROTOCOL_CONNECTION_LOST') {
+      console.log('Reconnecting to the database...');
       handleDisconnect(); // Reconectar en caso de pérdida de conexión
     } else {
       throw err;
@@ -45,9 +46,28 @@ function handleDisconnect() {
 
 handleDisconnect();
 
-// Rutas de tu aplicación
+// Configurar Multer para el manejo de archivos
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, 'uploads/'); // Directorio donde se guardarán los archivos
+  },
+  filename: (req, file, cb) => {
+    cb(null, `${Date.now()}-${file.originalname}`);
+  }
+});
+
+const upload = multer({ storage });
+
+// Ruta para obtener nombre, apellido y total deuda
 app.get('/debtors', (req, res) => {
-  connection.query('SELECT * FROM debtors', (err, results) => {
+  const query = `
+    SELECT debtors.id, debtors.nombre, debtors.apellido, SUM(debts.valor) as total_debt
+    FROM debtors
+    LEFT JOIN debts ON debtors.id = debts.debtor_id
+    WHERE debts.estado IN ('pendiente', 'vencido')
+    GROUP BY debtors.id, debtors.nombre, debtors.apellido
+  `;
+  connection.query(query, (err, results) => {
     if (err) {
       res.status(500).json({ error: err.message });
     } else {
@@ -56,25 +76,171 @@ app.get('/debtors', (req, res) => {
   });
 });
 
+// Ruta para obtener los detalles de una deuda por ID
 app.get('/debts/:id', (req, res) => {
-  const id = parseInt(req.params.id, 10);
+  const debtorId = req.params.id;
 
-  connection.query('SELECT * FROM debts, debtors WHERE debts.debtor_id = debtors.id AND debts.debtor_id=?;', [id], (err, results) => {
+  const query = `
+    SELECT debtors.id, debtors.nombre, debtors.apellido, debtors.cedula, debtors.direccion, debtors.telefono, debtors.foto,
+           debts.detalles, debts.valor, debts.estado, debts.fecha_registro, debts.fecha_pago_acordado
+    FROM debtors
+    LEFT JOIN debts ON debtors.id = debts.debtor_id
+    WHERE debtors.id = ?
+  `;
+
+  // Consulta para obtener los detalles del deudor y sus deudas
+  connection.query(query, [debtorId], (err, results) => {
     if (err) {
-      console.error('Error fetching debt detail:', err);
-      res.status(500).json({ message: 'Internal Server Error' });
-      return;
+      console.error('Error en la consulta:', err);
+      return res.status(500).json({ error: err.message });
     }
 
-    if (results.length > 0) {
-      const uniqueResults = results.map((debt, index) => ({
-        ...debt,
-        uniqueKey: `${debt.id}-${index}`
-      }));
-      res.json(uniqueResults);
-    } else {
-      res.status(404).json({ message: 'Debt not found' });
+    if (results.length === 0) {
+      return res.status(404).json({ message: 'Deudor no encontrado' });
     }
+
+    // Obtener detalles del deudor
+    const debtor = {
+      id: results[0].id,
+      nombre: results[0].nombre,
+      apellido: results[0].apellido,
+      cedula: results[0].cedula,
+      direccion: results[0].direccion,
+      telefono: results[0].telefono,
+      foto: results[0].foto
+    };
+
+    // Obtener detalles de las deudas
+    const debts = results
+      .filter(result => result.detalles !== null)
+      .map(result => ({
+        detalles: result.detalles,
+        valor: result.valor,
+        estado: result.estado,
+        fecha_registro: result.fecha_registro,
+        fecha_pago_acordado: result.fecha_pago_acordado
+      }));
+
+    // Calcular la deuda total pendiente o vencida
+    const totalDebtQuery = `
+      SELECT SUM(valor) AS total_debt
+      FROM debts
+      WHERE debtor_id = ? AND (estado = 'pendiente' OR estado = 'vencido')
+    `;
+
+    // Consulta para calcular la deuda total
+    connection.query(totalDebtQuery, [debtorId], (err, totalDebtResult) => {
+      if (err) {
+        console.error('Error en la consulta de deuda total:', err);
+        return res.status(500).json({ error: err.message });
+      }
+
+      const totalDebt = totalDebtResult[0].total_debt || 0;
+
+      // Enviar el resultado
+      res.json({
+        debtor,
+        debts,
+        total_debt: totalDebt
+      });
+    });
+  });
+});
+
+// Ruta para registrar una nueva deuda con opción de subir una foto
+app.post('/api/deudas', upload.single('foto'), (req, res) => {
+  const { cedula, nombre, apellido, direccion, telefono, detalles, valor, estado, fecha_registro, fecha_pago_acordado } = req.body;
+  const foto = req.file ? req.file.path : null;
+
+  const insertDebtorQuery = `
+    INSERT INTO debtors (cedula, nombre, apellido, direccion, telefono, foto)
+    VALUES (?, ?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), apellido = VALUES(apellido), direccion = VALUES(direccion), telefono = VALUES(telefono), foto = VALUES(foto)
+  `;
+
+  const insertDebtQuery = `
+    INSERT INTO debts (debtor_id, detalles, valor, estado, fecha_registro, fecha_pago_acordado)
+    VALUES ((SELECT id FROM debtors WHERE cedula = ?), ?, ?, ?, ?, ?)
+  `;
+
+  connection.beginTransaction((err) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    connection.query(insertDebtorQuery, [cedula, nombre, apellido, direccion, telefono, foto], (err, results) => {
+      if (err) {
+        return connection.rollback(() => {
+          res.status(500).json({ error: err.message });
+        });
+      }
+
+      connection.query(insertDebtQuery, [cedula, detalles, valor, estado, fecha_registro, fecha_pago_acordado], (err, results) => {
+        if (err) {
+          return connection.rollback(() => {
+            res.status(500).json({ error: err.message });
+          });
+        }
+
+        connection.commit((err) => {
+          if (err) {
+            return connection.rollback(() => {
+              res.status(500).json({ error: err.message });
+            });
+          }
+
+          res.json({ message: 'Deuda registrada exitosamente' });
+        });
+      });
+    });
+  });
+});
+
+// Ruta para registrar una nueva deuda sin opción de subir una foto (desde detalles de deuda)
+app.post('/api/desdedetalles', (req, res) => {
+  const { cedula, nombre, apellido, direccion, telefono, detalles, valor, estado, fecha_registro, fecha_pago_acordado } = req.body;
+
+  const insertDebtorQuery = `
+    INSERT INTO debtors (cedula, nombre, apellido, direccion, telefono)
+    VALUES (?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), apellido = VALUES(apellido), direccion = VALUES(direccion), telefono = VALUES(telefono)
+  `;
+
+  const insertDebtQuery = `
+    INSERT INTO debts (debtor_id, detalles, valor, estado, fecha_registro, fecha_pago_acordado)
+    VALUES ((SELECT id FROM debtors WHERE cedula = ?), ?, ?, ?, ?, ?)
+  `;
+
+  connection.beginTransaction((err) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    connection.query(insertDebtorQuery, [cedula, nombre, apellido, direccion, telefono], (err, results) => {
+      if (err) {
+        return connection.rollback(() => {
+          res.status(500).json({ error: err.message });
+        });
+      }
+
+      connection.query(insertDebtQuery, [cedula, detalles, valor, estado, fecha_registro, fecha_pago_acordado], (err, results) => {
+        if (err) {
+          return connection.rollback(() => {
+            res.status(500).json({ error: err.message });
+          });
+        }
+
+        connection.commit((err) => {
+          if (err) {
+            return connection.rollback(() => {
+              res.status(500).json({ error: err.message });
+            });
+          }
+
+          res.json({ message: 'Deuda registrada exitosamente' });
+        });
+      });
+    });
   });
 });
 

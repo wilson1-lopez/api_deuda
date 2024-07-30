@@ -1,11 +1,11 @@
 # Obtener todos los deudores
-GET http://localhost:3001/debtors
+GET http://localhost:4000/debtors
 Content-Type: application/json
 
 ###
 
 # Obtener detalles de la deuda para un deudor específico
-GET http://localhost:3001/debts/2
+GET http://localhost:4000/debts/2
 Content-Type: application/json
 
 ###
