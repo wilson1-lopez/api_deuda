@@ -207,6 +207,22 @@ app.post('/api/deudas', upload.none(), (req, res) => {
   });
 });
 
+//verificar si esxiste o no el usuario
+app.get('/api/check-cedula', (req, res) => {
+  const { cedula } = req.query;
+
+  const checkUserQuery = `SELECT COUNT(*) AS count FROM debtors WHERE cedula = ?`;
+
+  connection.query(checkUserQuery, [cedula], (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+
+    res.json({ exists: results[0].count > 0 });
+  });
+});
+
+
 // Ruta para registrar una nueva deuda sin opción de subir una foto (desde detalles de deuda)
 app.post('/api/desdedetalles', (req, res) => {
   const { cedula, nombre, apellido, direccion, telefono, detalles, valor, estado, fecha_registro, fecha_pago_acordado } = req.body;
