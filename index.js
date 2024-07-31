@@ -148,14 +148,13 @@ app.get('/debts/:id', (req, res) => {
 });
 
 // Ruta para registrar una nueva deuda con opción de subir una foto
-app.post('/api/deudas', upload.single('foto'), (req, res) => {
+app.post('/api/deudas', (req, res) => {
   const { cedula, nombre, apellido, direccion, telefono, detalles, valor, estado, fecha_registro, fecha_pago_acordado } = req.body;
-  const foto = req.file ? req.file.path : null;
 
   const insertDebtorQuery = `
-    INSERT INTO debtors (cedula, nombre, apellido, direccion, telefono, foto)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), apellido = VALUES(apellido), direccion = VALUES(direccion), telefono = VALUES(telefono), foto = VALUES(foto)
+    INSERT INTO debtors (cedula, nombre, apellido, direccion, telefono)
+    VALUES (?, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE nombre = VALUES(nombre), apellido = VALUES(apellido), direccion = VALUES(direccion), telefono = VALUES(telefono)
   `;
 
   const insertDebtQuery = `
@@ -168,7 +167,7 @@ app.post('/api/deudas', upload.single('foto'), (req, res) => {
       return res.status(500).json({ error: err.message });
     }
 
-    connection.query(insertDebtorQuery, [cedula, nombre, apellido, direccion, telefono, foto], (err, results) => {
+    connection.query(insertDebtorQuery, [cedula, nombre, apellido, direccion, telefono], (err, results) => {
       if (err) {
         return connection.rollback(() => {
           res.status(500).json({ error: err.message });
