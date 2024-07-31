@@ -148,8 +148,10 @@ app.get('/debts/:id', (req, res) => {
 });
 
 // Ruta para registrar una nueva deuda con opción de subir una foto
-app.post('/api/deudas', (req, res) => {
+app.post('/api/deudas', upload.none(), (req, res) => {
   const { cedula, nombre, apellido, direccion, telefono, detalles, valor, estado, fecha_registro, fecha_pago_acordado } = req.body;
+
+  const checkUserQuery = `SELECT COUNT(*) AS count FROM debtors WHERE cedula = ?`;
 
   const insertDebtorQuery = `
     INSERT INTO debtors (cedula, nombre, apellido, direccion, telefono)
@@ -162,33 +164,43 @@ app.post('/api/deudas', (req, res) => {
     VALUES ((SELECT id FROM debtors WHERE cedula = ?), ?, ?, ?, ?, ?)
   `;
 
-  connection.beginTransaction((err) => {
+  connection.query(checkUserQuery, [cedula], (err, results) => {
     if (err) {
       return res.status(500).json({ error: err.message });
     }
 
-    connection.query(insertDebtorQuery, [cedula, nombre, apellido, direccion, telefono], (err, results) => {
+    if (results[0].count > 0) {
+      return res.status(400).json({ error: 'El usuario con esta cédula ya existe' });
+    }
+
+    connection.beginTransaction((err) => {
       if (err) {
-        return connection.rollback(() => {
-          res.status(500).json({ error: err.message });
-        });
+        return res.status(500).json({ error: err.message });
       }
 
-      connection.query(insertDebtQuery, [cedula, detalles, valor, estado, fecha_registro, fecha_pago_acordado], (err, results) => {
+      connection.query(insertDebtorQuery, [cedula, nombre, apellido, direccion, telefono], (err, results) => {
         if (err) {
           return connection.rollback(() => {
             res.status(500).json({ error: err.message });
           });
         }
 
-        connection.commit((err) => {
+        connection.query(insertDebtQuery, [cedula, detalles, valor, estado, fecha_registro, fecha_pago_acordado], (err, results) => {
           if (err) {
             return connection.rollback(() => {
               res.status(500).json({ error: err.message });
             });
           }
 
-          res.json({ message: 'Deuda registrada exitosamente' });
+          connection.commit((err) => {
+            if (err) {
+              return connection.rollback(() => {
+                res.status(500).json({ error: err.message });
+              });
+            }
+
+            res.json({ message: 'Deuda registrada exitosamente' });
+          });
         });
       });
     });
