@@ -22,6 +22,13 @@ function handleDisconnect() {
     user: 'u9ogds8egmwvevci',
     password: 'Gbajf9DNtghlzmc5lplR',
     database: 'booxfva7gkco41ueigpq'
+
+    //host: 'localhost',
+    //user: 'root',
+    //password: '',
+    //database: 'debtors_db'
+
+
   });
 
   connection.connect((err) => {
